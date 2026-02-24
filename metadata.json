@@ -1,0 +1,5 @@
+{
+  "name": "TRAVIO",
+  "description": "A smart travel planning application featuring flight search, hotel recommendations, real-time weather, and emergency assistance.",
+  "requestFramePermissions": []
+}
