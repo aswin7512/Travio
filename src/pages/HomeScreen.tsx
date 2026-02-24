@@ -16,10 +16,10 @@ export default function HomeScreen() {
   };
 
   const popularDestinations = [
-    { name: 'Paris', image: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=800&q=80' },
-    { name: 'Dubai', image: 'https://images.unsplash.com/photo-1512453979798-5ea932a23644?auto=format&fit=crop&w=800&q=80' },
-    { name: 'Tokyo', image: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=800&q=80' },
-    { name: 'New York', image: 'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?auto=format&fit=crop&w=800&q=80' },
+    { name: 'Paris', image: 'paris.png' },
+    { name: 'Dubai', image: 'dubai.png' },
+    { name: 'Tokyo', image: 'tokyo.png' },
+    { name: 'New York', image: 'newyork.png' },
   ];
 
   return (
