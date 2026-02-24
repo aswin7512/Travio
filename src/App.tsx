@@ -1,4 +1,4 @@
-import { useRoutes, useLocation, BrowserRouter as Router } from 'react-router-dom';
+import { useRoutes, useLocation, HashRouter as Router } from 'react-router-dom';
 import { AnimatePresence } from 'motion/react';
 import { cloneElement } from 'react';
 import SplashScreen from './pages/SplashScreen';
