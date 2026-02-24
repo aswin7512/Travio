@@ -1,5 +1,3 @@
-Here is a detailed, professional `README.md` for your project. You can copy and paste this directly into your `README.md` file.
-
 # Travio ✈️ - AI-Powered Travel Planner
 
 Travio is a modern, responsive React application that leverages the power of Google's Gemini AI to generate personalized travel itineraries. Simply enter your desired destination and budget, and Travio will instantly plan your flights, hotels, places to visit, and even provide emergency contact info and weather forecasts.
