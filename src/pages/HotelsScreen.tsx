@@ -2,12 +2,12 @@ import { useState, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ArrowLeft, Bed, Star, Search, Loader2 } from 'lucide-react';
-import { getHotels, TripData } from '../lib/gemini';
 
 export default function HotelsScreen() {
   const navigate = useNavigate();
   const [location, setLocation] = useState('');
-  const [hotels, setHotels] = useState<TripData['hotels'] | null>(null);
+  // We use 'any' here temporarily because the AI might deviate from the strict TripData interface
+  const [hotels, setHotels] = useState<any[] | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleSearch = async (e: FormEvent) => {
@@ -16,10 +16,16 @@ export default function HotelsScreen() {
 
     setLoading(true);
     try {
+      // Use dynamic import or your existing gemini.ts import
+      const { getHotels } = await import('../lib/gemini');
       const data = await getHotels(location);
-      setHotels(data);
+      
+      // Ensure we are setting an array even if the AI wraps it in an object
+      const hotelsArray = Array.isArray(data) ? data : (data?.hotels || []);
+      setHotels(hotelsArray);
     } catch (error) {
       console.error("Failed to fetch hotels", error);
+      // Optional: Add a UI toast or alert here so the user knows it failed
     } finally {
       setLoading(false);
     }
@@ -54,50 +60,66 @@ export default function HotelsScreen() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 pb-24">
-        {hotels && (
+        {hotels && hotels.length > 0 && (
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             className="space-y-4"
           >
-            {hotels.map((hotel, index) => (
-              <motion.div
-                key={index}
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: index * 0.1 }}
-                className="bg-slate-800 p-4 rounded-2xl border border-slate-700/50"
-              >
-                <div className="flex justify-between items-start mb-2">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-slate-700 rounded-full flex items-center justify-center shrink-0">
-                      <Bed size={20} className="text-cyan-400" />
-                    </div>
-                    <h3 className="font-bold text-lg leading-tight">{hotel.name}</h3>
-                  </div>
-                  <div className="flex items-center gap-1 bg-yellow-500/10 px-2 py-1 rounded-md shrink-0">
-                    <Star size={14} className="text-yellow-400 fill-yellow-400" />
-                    <span className="text-yellow-400 text-xs font-bold">{hotel.rating}</span>
-                  </div>
-                </div>
-                
-                <div className="flex flex-wrap gap-2 mb-4 pl-13">
-                  {hotel.amenities.slice(0, 3).map((amenity, i) => (
-                    <span key={i} className="text-xs text-slate-400 bg-slate-900 px-2 py-1 rounded-md">
-                      {amenity}
-                    </span>
-                  ))}
-                </div>
+            {hotels.map((hotel: any, index: number) => {
+              // 🛡️ SMART MAPPING: Normalize the amenities data
+              const amenitiesArray = Array.isArray(hotel?.amenities) 
+                ? hotel.amenities 
+                : (typeof hotel?.amenities === 'string' ? hotel.amenities.split(',') : []);
 
-                <div className="flex justify-between items-center pt-3 border-t border-slate-700/50 pl-13">
-                  <span className="text-slate-400 text-xs">per night</span>
-                  <span className="text-xl font-bold">₹{hotel.pricePerNight.toLocaleString()}</span>
-                </div>
-              </motion.div>
-            ))}
+              // Normalize price in case the AI renamed it
+              const price = hotel?.pricePerNight || hotel?.price_per_night_inr || hotel?.price || 0;
+
+              return (
+                <motion.div
+                  key={index}
+                  initial={{ y: 20, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: index * 0.1 }}
+                  className="bg-slate-800 p-4 rounded-2xl border border-slate-700/50"
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-slate-700 rounded-full flex items-center justify-center shrink-0">
+                        <Bed size={20} className="text-cyan-400" />
+                      </div>
+                      <h3 className="font-bold text-lg leading-tight">{hotel?.name || "Hotel Option"}</h3>
+                    </div>
+                    <div className="flex items-center gap-1 bg-yellow-500/10 px-2 py-1 rounded-md shrink-0">
+                      <Star size={14} className="text-yellow-400 fill-yellow-400" />
+                      <span className="text-yellow-400 text-xs font-bold">{hotel?.rating || "N/A"}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-wrap gap-2 mb-4 pl-13">
+                    {amenitiesArray.slice(0, 3).map((amenity: string, i: number) => (
+                      <span key={i} className="text-xs text-slate-400 bg-slate-900 px-2 py-1 rounded-md">
+                        {amenity.trim()}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="flex justify-between items-center pt-3 border-t border-slate-700/50 pl-13">
+                    <span className="text-slate-400 text-xs">per night</span>
+                    <span className="text-xl font-bold">₹{price.toLocaleString()}</span>
+                  </div>
+                </motion.div>
+              );
+            })}
           </motion.div>
         )}
         
+        {hotels && hotels.length === 0 && !loading && (
+           <div className="flex flex-col items-center justify-center h-64 text-slate-500">
+             <p>No hotels found for this location. Please try again.</p>
+           </div>
+        )}
+
         {!hotels && !loading && (
           <div className="flex flex-col items-center justify-center h-64 text-slate-500">
             <Bed size={48} className="mb-4 opacity-20" />

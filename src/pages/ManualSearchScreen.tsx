@@ -2,7 +2,6 @@ import { useState, FormEvent } from 'react';
 import { ArrowLeft, Search, PlaneTakeoff, PlaneLanding, Calendar, Loader2, Plane, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { getFlights, TripData } from '../lib/gemini';
 
 export default function ManualSearchScreen() {
   const navigate = useNavigate();
@@ -10,7 +9,7 @@ export default function ManualSearchScreen() {
   const [to, setTo] = useState('');
   const [date, setDate] = useState('');
   const [loading, setLoading] = useState(false);
-  const [flights, setFlights] = useState<TripData['flights'] | null>(null);
+  const [flights, setFlights] = useState<any[] | null>(null);
 
   const handleSearch = async (e: FormEvent) => {
     e.preventDefault();
@@ -19,8 +18,12 @@ export default function ManualSearchScreen() {
     setLoading(true);
     setFlights(null);
     try {
+      const { getFlights } = await import('../lib/gemini');
       const data = await getFlights(from, to, date);
-      setFlights(data);
+      
+      // 🛡️ SMART MAPPING: Handle arrays wrapped inside an object
+      const flightsArray = Array.isArray(data) ? data : (data?.flights || []);
+      setFlights(flightsArray);
     } catch (error) {
       console.error("Failed to fetch flights", error);
     } finally {
@@ -105,7 +108,7 @@ export default function ManualSearchScreen() {
         </motion.div>
 
         <AnimatePresence>
-          {flights && (
+          {flights && flights.length > 0 && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -113,41 +116,51 @@ export default function ManualSearchScreen() {
               className="space-y-4"
             >
               <h2 className="text-lg font-bold mb-4">Available Flights</h2>
-              {flights.map((flight, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                  className="bg-slate-800 p-4 rounded-2xl border border-slate-700/50 flex flex-col gap-4"
-                >
-                  <div className="flex justify-between items-start">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-slate-700 rounded-full flex items-center justify-center">
-                        <Plane size={20} className="text-cyan-400" />
+              {flights.map((flight: any, index: number) => {
+                 // Normalize price
+                 const price = flight?.price || flight?.price_inr || 0;
+                 return (
+                  <motion.div
+                    key={index}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                    className="bg-slate-800 p-4 rounded-2xl border border-slate-700/50 flex flex-col gap-4"
+                  >
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-slate-700 rounded-full flex items-center justify-center">
+                          <Plane size={20} className="text-cyan-400" />
+                        </div>
+                        <div>
+                          <h3 className="font-bold">{flight?.airline || "Unknown Airline"}</h3>
+                          <p className="text-slate-400 text-xs">{flight?.flightNumber || flight?.flight_number || "N/A"}</p>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="font-bold">{flight.airline}</h3>
-                        <p className="text-slate-400 text-xs">{flight.flightNumber}</p>
+                      <span className="bg-slate-700/50 text-cyan-400 text-xs font-medium px-2 py-1 rounded-md max-w-[100px] text-center truncate">
+                        {flight?.type || "Standard"}
+                      </span>
+                    </div>
+                    
+                    <div className="flex justify-between items-center pt-2 border-t border-slate-700/50">
+                      <div className="flex items-center gap-2 text-slate-300 text-sm">
+                        <Clock size={16} />
+                        <span>{flight?.duration || "--"}</span>
                       </div>
+                      <span className="text-xl font-bold">₹{price.toLocaleString()}</span>
                     </div>
-                    <span className="bg-slate-700/50 text-cyan-400 text-xs font-medium px-2 py-1 rounded-md">
-                      {flight.type}
-                    </span>
-                  </div>
-                  
-                  <div className="flex justify-between items-center pt-2 border-t border-slate-700/50">
-                    <div className="flex items-center gap-2 text-slate-300 text-sm">
-                      <Clock size={16} />
-                      <span>{flight.duration}</span>
-                    </div>
-                    <span className="text-xl font-bold">₹{flight.price.toLocaleString()}</span>
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                );
+              })}
             </motion.div>
           )}
         </AnimatePresence>
+
+        {flights && flights.length === 0 && !loading && (
+           <div className="mt-8 text-center">
+             <p className="text-slate-500 text-sm">No flights found for this route. Try a different date.</p>
+           </div>
+        )}
         
         {!flights && !loading && (
           <div className="mt-8 text-center">

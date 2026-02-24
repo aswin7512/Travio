@@ -2,12 +2,11 @@ import { useState, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ArrowLeft, MapPin, Star, Search, Loader2 } from 'lucide-react';
-import { getPlaces, TripData } from '../lib/gemini';
 
 export default function PlacesScreen() {
   const navigate = useNavigate();
   const [location, setLocation] = useState('');
-  const [places, setPlaces] = useState<TripData['places'] | null>(null);
+  const [places, setPlaces] = useState<any[] | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleSearch = async (e: FormEvent) => {
@@ -16,8 +15,12 @@ export default function PlacesScreen() {
 
     setLoading(true);
     try {
+      const { getPlaces } = await import('../lib/gemini');
       const data = await getPlaces(location);
-      setPlaces(data);
+      
+      // 🛡️ SMART MAPPING: Ensure we always have an array
+      const placesArray = Array.isArray(data) ? data : (data?.places || data?.places_to_visit || []);
+      setPlaces(placesArray);
     } catch (error) {
       console.error("Failed to fetch places", error);
     } finally {
@@ -54,13 +57,13 @@ export default function PlacesScreen() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 pb-24">
-        {places && (
+        {places && places.length > 0 && (
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             className="space-y-4"
           >
-            {places.map((place, index) => (
+            {places.map((place: any, index: number) => (
               <motion.div
                 key={index}
                 initial={{ y: 20, opacity: 0 }}
@@ -74,18 +77,24 @@ export default function PlacesScreen() {
                   </div>
                 </div>
                 
-                <h3 className="font-bold text-lg mb-1 pr-10">{place.name}</h3>
+                <h3 className="font-bold text-lg mb-1 pr-10">{place?.name || "Location"}</h3>
                 <div className="flex items-center gap-1 mb-3">
                   <Star size={14} className="text-yellow-400 fill-yellow-400" />
-                  <span className="text-slate-300 text-xs">{place.rating} / 5</span>
+                  <span className="text-slate-300 text-xs">{place?.rating || "N/A"} / 5</span>
                 </div>
                 
                 <p className="text-slate-400 text-sm leading-relaxed">
-                  {place.description}
+                  {place?.description || "No description available."}
                 </p>
               </motion.div>
             ))}
           </motion.div>
+        )}
+
+        {places && places.length === 0 && !loading && (
+          <div className="flex flex-col items-center justify-center h-64 text-slate-500">
+            <p>No places found for this location. Please try again.</p>
+          </div>
         )}
         
         {!places && !loading && (

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { generateTripPlan, TripData } from '../lib/gemini';
@@ -9,7 +9,11 @@ export default function LoadingScreen() {
   const { destination, budget } = location.state || { destination: 'Paris', budget: '100000' };
   const [loadingText, setLoadingText] = useState('Analyzing destination...');
 
+  const hasFetched = useRef(false);
+
   useEffect(() => {
+    if (hasFetched.current) return;
+    hasFetched.current = true;
     const messages = [
       "Analyzing destination...",
       "Optimizing budget...",

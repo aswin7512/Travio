@@ -8,8 +8,11 @@ import { TripData } from '../lib/gemini';
 export default function ResultsScreen() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { data, destination } = location.state as { data: TripData; destination: string } || {};
+  // Using 'any' here temporarily because the AI broke our strict TripData interface
+  const { data, destination } = location.state as { data: any; destination: string } || {};
   const [activeTab, setActiveTab] = useState<'flights' | 'hotels' | 'places' | 'weather' | 'emergency'>('flights');
+
+  console.log("AI Returned This Data: ", data);
 
   useEffect(() => {
     if (!data) {
@@ -18,6 +21,25 @@ export default function ResultsScreen() {
   }, [data, navigate]);
 
   if (!data) return null;
+
+  // --- SMART MAPPING: Extract data using either the strict schema OR the AI's custom keys ---
+  const flightsList = data?.flights || [];
+  const hotelsList = data?.hotels || [];
+  const placesList = data?.places || data?.places_to_visit || [];
+  const weatherData = data?.weather || data?.current_typical_weather_forecast || {};
+  const emergencyData = data?.emergency || data?.emergency_info || {};
+  
+  // Handle the obstruction whether the AI returned an object or a flat string
+  let hasIssue = false;
+  let issueMessage = "";
+  const obsData = data?.obstruction || data?.travel_obstruction;
+  if (typeof obsData === 'string') {
+     hasIssue = !obsData.toLowerCase().includes('no currently') && !obsData.toLowerCase().includes('no major');
+     issueMessage = obsData;
+  } else {
+     hasIssue = obsData?.hasObstruction || false;
+     issueMessage = obsData?.message || "";
+  }
 
   const tabs = [
     { id: 'flights', label: 'Flights', icon: Plane },
@@ -41,7 +63,7 @@ export default function ResultsScreen() {
       </div>
 
       {/* Obstruction Alert */}
-      {data.obstruction.hasObstruction && (
+      {hasIssue && (
         <motion.div 
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -50,10 +72,7 @@ export default function ResultsScreen() {
           <AlertCircle className="text-red-400 shrink-0 mt-0.5" size={20} />
           <div>
             <h3 className="font-bold text-red-400 text-sm mb-1">Travel Alert</h3>
-            <p className="text-red-200 text-xs leading-relaxed">{data.obstruction.message}</p>
-            <button className="mt-2 text-xs font-medium text-red-400 underline decoration-red-400/50 hover:decoration-red-400">
-              View Rerouting Options
-            </button>
+            <p className="text-red-200 text-xs leading-relaxed">{issueMessage}</p>
           </div>
         </motion.div>
       )}
@@ -73,7 +92,7 @@ export default function ResultsScreen() {
             {activeTab === tab.id && (
               <motion.div
                 layoutId="activeTab"
-                className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-500 rounded-full"
+                className="absolute bottom-0 left-0 right-0 h-0.5 bg-cyan-400 rounded-full"
               />
             )}
           </button>
@@ -91,91 +110,113 @@ export default function ResultsScreen() {
             transition={{ duration: 0.2 }}
             className="space-y-4"
           >
+            {/* FLIGHTS */}
             {activeTab === 'flights' && (
               <div className="space-y-4">
-                {data.flights.map((flight, index) => (
-                  <div key={index} className="bg-slate-800 p-4 rounded-2xl border border-slate-700/50 flex flex-col gap-4">
-                    <div className="flex justify-between items-start">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-slate-700 rounded-full flex items-center justify-center">
-                          <Plane size={20} className="text-cyan-400" />
+                {flightsList.length > 0 ? (
+                  flightsList.map((flight: any, index: number) => (
+                    <div key={index} className="bg-slate-800 p-4 rounded-2xl border border-slate-700/50 flex flex-col gap-4">
+                      <div className="flex justify-between items-start">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-slate-700 rounded-full flex items-center justify-center">
+                            <Plane size={20} className="text-cyan-400" />
+                          </div>
+                          <div>
+                            <h3 className="font-bold">{flight?.airline || "Unknown Airline"}</h3>
+                            <p className="text-slate-400 text-xs">{flight?.flightNumber || flight?.flight_number || "N/A"}</p>
+                          </div>
                         </div>
-                        <div>
-                          <h3 className="font-bold">{flight.airline}</h3>
-                          <p className="text-slate-400 text-xs">{flight.flightNumber}</p>
+                        <span className="bg-slate-700/50 text-cyan-400 text-xs font-medium px-2 py-1 rounded-md max-w-[100px] text-center truncate">
+                          {flight?.type || "Standard"}
+                        </span>
+                      </div>
+                      
+                      <div className="flex justify-between items-center pt-2 border-t border-slate-700/50">
+                        <div className="flex items-center gap-2 text-slate-300 text-sm">
+                          <Clock size={16} />
+                          <span>{flight?.duration || "--"}</span>
                         </div>
+                        <span className="text-xl font-bold">₹{(flight?.price || flight?.price_inr)?.toLocaleString() || "N/A"}</span>
                       </div>
-                      <span className="bg-slate-700/50 text-cyan-400 text-xs font-medium px-2 py-1 rounded-md">
-                        {flight.type}
-                      </span>
                     </div>
-                    
-                    <div className="flex justify-between items-center pt-2 border-t border-slate-700/50">
-                      <div className="flex items-center gap-2 text-slate-300 text-sm">
-                        <Clock size={16} />
-                        <span>{flight.duration}</span>
-                      </div>
-                      <span className="text-xl font-bold">₹{flight.price.toLocaleString()}</span>
-                    </div>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  <p className="text-slate-400 text-center py-8">No flight information available.</p>
+                )}
               </div>
             )}
 
+            {/* HOTELS */}
             {activeTab === 'hotels' && (
               <div className="space-y-4">
-                {data.hotels.map((hotel, index) => (
-                  <div key={index} className="bg-slate-800 p-4 rounded-2xl border border-slate-700/50">
-                    <div className="flex justify-between items-start mb-2">
-                      <h3 className="font-bold text-lg">{hotel.name}</h3>
-                      <div className="flex items-center gap-1 bg-yellow-500/10 px-2 py-1 rounded-md">
-                        <Star size={14} className="text-yellow-400 fill-yellow-400" />
-                        <span className="text-yellow-400 text-xs font-bold">{hotel.rating}</span>
-                      </div>
-                    </div>
-                    
-                    <div className="flex flex-wrap gap-2 mb-4">
-                      {hotel.amenities.slice(0, 3).map((amenity, i) => (
-                        <span key={i} className="text-xs text-slate-400 bg-slate-900 px-2 py-1 rounded-md">
-                          {amenity}
-                        </span>
-                      ))}
-                    </div>
+                {hotelsList.length > 0 ? (
+                  hotelsList.map((hotel: any, index: number) => {
+                    // The AI returned amenities as a single comma-separated string instead of an array! We fix it here:
+                    const amenitiesArray = Array.isArray(hotel?.amenities) 
+                      ? hotel.amenities 
+                      : (typeof hotel?.amenities === 'string' ? hotel.amenities.split(',') : []);
 
-                    <div className="flex justify-between items-center pt-3 border-t border-slate-700/50">
-                      <span className="text-slate-400 text-xs">per night</span>
-                      <span className="text-xl font-bold">₹{hotel.pricePerNight.toLocaleString()}</span>
-                    </div>
-                  </div>
-                ))}
+                    return (
+                      <div key={index} className="bg-slate-800 p-4 rounded-2xl border border-slate-700/50">
+                        <div className="flex justify-between items-start mb-2">
+                          <h3 className="font-bold text-lg">{hotel?.name || "Hotel Option"}</h3>
+                          <div className="flex items-center gap-1 bg-yellow-500/10 px-2 py-1 rounded-md">
+                            <Star size={14} className="text-yellow-400 fill-yellow-400" />
+                            <span className="text-yellow-400 text-xs font-bold">{hotel?.rating || "N/A"}</span>
+                          </div>
+                        </div>
+                        
+                        <div className="flex flex-wrap gap-2 mb-4">
+                          {amenitiesArray.slice(0, 3).map((amenity: string, i: number) => (
+                            <span key={i} className="text-xs text-slate-400 bg-slate-900 px-2 py-1 rounded-md">
+                              {amenity.trim()}
+                            </span>
+                          ))}
+                        </div>
+
+                        <div className="flex justify-between items-center pt-3 border-t border-slate-700/50">
+                          <span className="text-slate-400 text-xs">per night</span>
+                          <span className="text-xl font-bold">₹{(hotel?.pricePerNight || hotel?.price_per_night_inr)?.toLocaleString() || "N/A"}</span>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                   <p className="text-slate-400 text-center py-8">No hotel information available.</p>
+                )}
               </div>
             )}
 
+            {/* PLACES */}
             {activeTab === 'places' && (
               <div className="space-y-4">
-                {data.places.map((place, index) => (
-                  <div key={index} className="bg-slate-800 p-4 rounded-2xl border border-slate-700/50 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-4">
-                      <div className="w-8 h-8 bg-cyan-400/10 rounded-full flex items-center justify-center">
-                        <MapPin size={16} className="text-cyan-400" />
+                {placesList.length > 0 ? (
+                  placesList.map((place: any, index: number) => (
+                    <div key={index} className="bg-slate-800 p-4 rounded-2xl border border-slate-700/50 relative overflow-hidden">
+                      <div className="absolute top-0 right-0 p-4">
+                        <div className="w-8 h-8 bg-cyan-400/10 rounded-full flex items-center justify-center">
+                          <MapPin size={16} className="text-cyan-400" />
+                        </div>
                       </div>
+                      
+                      <h3 className="font-bold text-lg mb-1 pr-10">{place?.name || "Location"}</h3>
+                      <div className="flex items-center gap-1 mb-3">
+                        <Star size={14} className="text-yellow-400 fill-yellow-400" />
+                        <span className="text-slate-300 text-xs">{place?.rating || "N/A"} / 5</span>
+                      </div>
+                      
+                      <p className="text-slate-400 text-sm leading-relaxed">
+                        {place?.description || "No description available."}
+                      </p>
                     </div>
-                    
-                    <h3 className="font-bold text-lg mb-1 pr-10">{place.name}</h3>
-                    <div className="flex items-center gap-1 mb-3">
-                      <Star size={14} className="text-yellow-400 fill-yellow-400" />
-                      <span className="text-slate-300 text-xs">{place.rating} / 5</span>
-                      <span className="text-slate-500 text-xs">• Highly rated tourist spot</span>
-                    </div>
-                    
-                    <p className="text-slate-400 text-sm leading-relaxed">
-                      {place.description}
-                    </p>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                   <p className="text-slate-400 text-center py-8">No places information available.</p>
+                )}
               </div>
             )}
 
+            {/* WEATHER */}
             {activeTab === 'weather' && (
               <div className="flex flex-col items-center justify-center py-12 text-center space-y-6">
                 <div className="w-32 h-32 bg-slate-800 rounded-full flex items-center justify-center relative">
@@ -184,17 +225,14 @@ export default function ResultsScreen() {
                 </div>
                 
                 <div>
-                  <h2 className="text-4xl font-bold mb-2">{data.weather.temperature}</h2>
-                  <p className="text-xl text-cyan-400 font-medium">{data.weather.condition}</p>
-                  <p className="text-slate-400 mt-2 max-w-xs mx-auto">{data.weather.summary}</p>
-                </div>
-
-                <div className="w-full bg-slate-800/50 p-4 rounded-xl border border-slate-700/50 mt-8">
-                  <p className="text-sm text-slate-400">Weather information will appear here 🌤️</p>
+                  <h2 className="text-4xl font-bold mb-2">{weatherData?.temperature || "--°C"}</h2>
+                  <p className="text-xl text-cyan-400 font-medium">{weatherData?.condition || weatherData?.conditions || "Unknown"}</p>
+                  <p className="text-slate-400 mt-2 max-w-xs mx-auto">{weatherData?.summary || weatherData?.wind || "Weather data unavailable"}</p>
                 </div>
               </div>
             )}
 
+            {/* EMERGENCY */}
             {activeTab === 'emergency' && (
               <div className="space-y-4">
                 <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700/50 flex items-center gap-4">
@@ -203,7 +241,7 @@ export default function ResultsScreen() {
                   </div>
                   <div>
                     <h3 className="font-bold text-white">Nearest Hospital</h3>
-                    <p className="text-slate-400 text-sm">{data.emergency.hospital}</p>
+                    <p className="text-slate-400 text-sm">{emergencyData?.hospital || emergencyData?.major_hospital || "Information unavailable"}</p>
                   </div>
                 </div>
 
@@ -213,7 +251,7 @@ export default function ResultsScreen() {
                   </div>
                   <div>
                     <h3 className="font-bold text-white">Police Station</h3>
-                    <p className="text-slate-400 text-sm">{data.emergency.police}</p>
+                    <p className="text-slate-400 text-sm">{emergencyData?.police || emergencyData?.police_station || "Information unavailable"}</p>
                   </div>
                 </div>
 
@@ -223,7 +261,8 @@ export default function ResultsScreen() {
                   </div>
                   <div>
                     <h3 className="font-bold text-white">Emergency Helpline</h3>
-                    <p className="text-slate-400 text-sm">{data.emergency.helpline}</p>
+                    {/* Maps AI's nested helplines object if the normal string isn't there */}
+                    <p className="text-slate-400 text-sm">{emergencyData?.helpline || emergencyData?.helplines?.general_european_emergency || emergencyData?.helplines?.police || "112"}</p>
                   </div>
                 </div>
               </div>

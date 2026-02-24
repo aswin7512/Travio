@@ -2,12 +2,11 @@ import { useState, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ArrowLeft, AlertTriangle, Search, Loader2, Plus, Shield, Phone } from 'lucide-react';
-import { getEmergencyInfo, TripData } from '../lib/gemini';
 
 export default function EmergencyScreen() {
   const navigate = useNavigate();
   const [location, setLocation] = useState('');
-  const [emergency, setEmergency] = useState<TripData['emergency'] | null>(null);
+  const [emergency, setEmergency] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleSearch = async (e: FormEvent) => {
@@ -16,8 +15,18 @@ export default function EmergencyScreen() {
 
     setLoading(true);
     try {
+      const { getEmergencyInfo } = await import('../lib/gemini');
       const data = await getEmergencyInfo(location);
-      setEmergency(data);
+      
+      // 🛡️ SMART MAPPING: AI might return the object directly, or wrap it in an "emergency" key
+      const emergencyData = data?.emergency || data?.emergency_info || data || {};
+      
+      // Check if the object actually has keys before setting it
+      if (Object.keys(emergencyData).length > 0) {
+        setEmergency(emergencyData);
+      } else {
+        setEmergency(null); // Force empty state if AI returns empty object
+      }
     } catch (error) {
       console.error("Failed to fetch emergency info", error);
     } finally {
@@ -66,7 +75,7 @@ export default function EmergencyScreen() {
               </div>
               <div>
                 <h3 className="font-bold text-white">Nearest Hospital</h3>
-                <p className="text-slate-400 text-sm">{emergency.hospital}</p>
+                <p className="text-slate-400 text-sm">{emergency?.hospital || emergency?.major_hospital || "Information unavailable"}</p>
               </div>
             </div>
 
@@ -76,7 +85,7 @@ export default function EmergencyScreen() {
               </div>
               <div>
                 <h3 className="font-bold text-white">Police Station</h3>
-                <p className="text-slate-400 text-sm">{emergency.police}</p>
+                <p className="text-slate-400 text-sm">{emergency?.police || emergency?.police_station || "Information unavailable"}</p>
               </div>
             </div>
 
@@ -86,7 +95,7 @@ export default function EmergencyScreen() {
               </div>
               <div>
                 <h3 className="font-bold text-white">Emergency Helpline</h3>
-                <p className="text-slate-400 text-sm">{emergency.helpline}</p>
+                <p className="text-slate-400 text-sm">{emergency?.helpline || emergency?.helplines?.general_european_emergency || emergency?.helplines?.police || "112"}</p>
               </div>
             </div>
           </motion.div>
