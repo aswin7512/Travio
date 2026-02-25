@@ -95,7 +95,7 @@ The API requests are strictly typed using `Type.OBJECT` and `Type.ARRAY` to guar
 
 Contributions are welcome! Feel free to open an issue or submit a pull request if you have ideas for new features, bug fixes, or UI improvements.
 
-## Find the Hosted website [Here](https://aswin7512.github.io/Travio)
+## Find the Hosted website [Here](https://travioworld.netlify.app/)
 
 ## 📝 License
 
