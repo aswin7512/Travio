@@ -1,7 +1,8 @@
-import { GoogleGenAI, Type } from "@google/genai";
+// Ensure your .env file has: VITE_OPENROUTER_API_KEY=your_key_here
+const OPENROUTER_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY;
 
-const apiKey = process.env.GEMINI_API_KEY;
-const ai = new GoogleGenAI({ apiKey });
+// You can easily swap this out later if needed
+const MODEL_NAME = "google/gemini-2.5-flash"; 
 
 export interface TripData {
   flights: {
@@ -38,202 +39,124 @@ export interface TripData {
   };
 }
 
-export async function generateTripPlan(destination: string, budget: string): Promise<TripData> {
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: `Generate a realistic travel itinerary for a trip to ${destination} with a budget of ${budget} INR.
-    Provide 3 flight options, 3 hotel options, and 3 popular places to visit.
-    Include realistic prices in INR.
-    For weather, provide a current typical forecast for this time of year.
-    For emergency, provide the names of a major hospital and police station in ${destination}.
-    Randomly decide if there is a travel obstruction (e.g., road closure, weather alert) with a 20% chance.`,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          flights: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                airline: { type: Type.STRING },
-                flightNumber: { type: Type.STRING },
-                duration: { type: Type.STRING },
-                price: { type: Type.NUMBER },
-                type: { type: Type.STRING },
-              },
-              required: ["airline", "flightNumber", "duration", "price", "type"],
-            },
-          },
-          hotels: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                name: { type: Type.STRING },
-                rating: { type: Type.NUMBER },
-                amenities: { type: Type.ARRAY, items: { type: Type.STRING } },
-                pricePerNight: { type: Type.NUMBER },
-              },
-              required: ["name", "rating", "amenities", "pricePerNight"],
-            },
-          },
-          places: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                name: { type: Type.STRING },
-                description: { type: Type.STRING },
-                rating: { type: Type.NUMBER },
-              },
-              required: ["name", "description", "rating"],
-            },
-          },
-          weather: {
-            type: Type.OBJECT,
-            properties: {
-              summary: { type: Type.STRING },
-              temperature: { type: Type.STRING },
-              condition: { type: Type.STRING },
-            },
-            required: ["summary", "temperature", "condition"],
-          },
-          emergency: {
-            type: Type.OBJECT,
-            properties: {
-              hospital: { type: Type.STRING },
-              police: { type: Type.STRING },
-              helpline: { type: Type.STRING },
-            },
-            required: ["hospital", "police", "helpline"],
-          },
-          obstruction: {
-            type: Type.OBJECT,
-            properties: {
-              hasObstruction: { type: Type.BOOLEAN },
-              message: { type: Type.STRING },
-            },
-            required: ["hasObstruction", "message"],
-          },
-        },
-        required: ["flights", "hotels", "places", "weather", "emergency", "obstruction"],
-      },
-    },
-  });
-
-  if (response.text) {
-    return JSON.parse(response.text) as TripData;
+/**
+ * Centralized function to handle all OpenRouter API requests.
+ * Uses the native fetch API to communicate with OpenRouter.
+ */
+async function fetchOpenRouterData(action: string, payload: any): Promise<any> {
+  if (!OPENROUTER_API_KEY) {
+    console.error("Missing VITE_OPENROUTER_API_KEY in environment variables.");
+    throw new Error("API configuration error. Please check your environment variables.");
   }
-  throw new Error("Failed to generate trip plan");
+
+  let prompt = "";
+
+  switch (action) {
+    case 'fullPlan':
+      prompt = `Generate a realistic travel itinerary for ${payload.destination} (Budget: ${payload.budget} INR).
+      Your JSON MUST contain EXACTLY these 6 top-level keys:
+      1. "flights": Array of exactly 3 flight objects (keys: "airline", "flightNumber", "duration", "price" [number], "type").
+      2. "hotels": Array of exactly 3 hotel objects (keys: "name", "rating", "amenities" [array of strings], "pricePerNight" [number]).
+      3. "places": Array of exactly 3 tourist places (keys: "name", "description", "rating").
+      4. "weather": An object (keys: "summary", "temperature", "condition").
+      5. "emergency": An object (keys: "hospital", "police", "helpline").
+      6. "obstruction": An object (keys: "hasObstruction" [boolean], "message" [string]).`;
+      break;
+
+    case 'flights':
+      prompt = `Find 5 real flight options from ${payload.from} to ${payload.to} on ${payload.date}. 
+      Return a JSON object with a single key "flights" containing an array of objects. Each object MUST have keys: "airline", "flightNumber", "duration", "price" [number in INR], "type".`;
+      break;
+
+    case 'hotels':
+      prompt = `Find 5 popular hotels in ${payload.location}. 
+      Return a JSON object with a single key "hotels" containing an array of objects. Each object MUST have keys: "name", "rating", "amenities" [array of strings], "pricePerNight" [number in INR].`;
+      break;
+
+    case 'places':
+      prompt = `List 5 popular tourist attractions in ${payload.location}. 
+      Return a JSON object with a single key "places" containing an array of objects. Each object MUST have keys: "name", "description", "rating".`;
+      break;
+
+    case 'emergency':
+      prompt = `Provide emergency contact information for ${payload.location}. 
+      Return a JSON object with keys: "hospital", "police", "helpline".`;
+      break;
+
+    default:
+      throw new Error(`Invalid action provided to API fetcher: ${action}`);
+  }
+
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": window.location.origin, 
+        "X-Title": "Travio App", 
+      },
+      body: JSON.stringify({
+        model: MODEL_NAME,
+        messages: [
+          { 
+            role: "system", 
+            content: "You are a strict travel data API. You MUST return ONLY valid JSON. Do not include markdown formatting, backticks, or any conversational text. Use the exact keys requested." 
+          },
+          { 
+            role: "user", 
+            content: prompt 
+          }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.1,
+        max_tokens: 3000
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[OpenRouter HTTP Error ${response.status}]:`, errorText);
+      throw new Error(`API returned status ${response.status}`);
+    }
+
+    const data = await response.json();
+    let finalResponse = data.choices[0]?.message?.content || "{}";
+
+    // Fallback cleanup if the AI includes markdown code blocks despite instructions
+    if (finalResponse.includes("```")) {
+      finalResponse = finalResponse.replace(/```json|```/g, "").trim();
+    }
+
+    return JSON.parse(finalResponse);
+
+  } catch (error) {
+    console.error("[gemini.ts] Fetch Error:", error);
+    throw error; 
+  }
+}
+
+// --- Public Interface Functions ---
+
+export async function generateTripPlan(destination: string, budget: string): Promise<TripData> {
+  return await fetchOpenRouterData('fullPlan', { destination, budget }) as TripData;
 }
 
 export async function getHotels(location: string): Promise<TripData['hotels']> {
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: `Find 5 popular hotels in ${location}. Include rating, amenities, and price per night in INR.`,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            name: { type: Type.STRING },
-            rating: { type: Type.NUMBER },
-            amenities: { type: Type.ARRAY, items: { type: Type.STRING } },
-            pricePerNight: { type: Type.NUMBER },
-          },
-          required: ["name", "rating", "amenities", "pricePerNight"],
-        },
-      },
-    },
-  });
-
-  if (response.text) {
-    return JSON.parse(response.text) as TripData['hotels'];
-  }
-  throw new Error("Failed to fetch hotels");
+  const result = await fetchOpenRouterData('hotels', { location });
+  return result.hotels || [];
 }
 
 export async function getPlaces(location: string): Promise<TripData['places']> {
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: `List 5 popular tourist attractions in ${location}. Include a description and rating.`,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            name: { type: Type.STRING },
-            description: { type: Type.STRING },
-            rating: { type: Type.NUMBER },
-          },
-          required: ["name", "description", "rating"],
-        },
-      },
-    },
-  });
-
-  if (response.text) {
-    return JSON.parse(response.text) as TripData['places'];
-  }
-  throw new Error("Failed to fetch places");
+  const result = await fetchOpenRouterData('places', { location });
+  return result.places || [];
 }
 
 export async function getEmergencyInfo(location: string): Promise<TripData['emergency']> {
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: `Provide emergency contact information for ${location}, including a major hospital, police station, and general emergency helpline.`,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          hospital: { type: Type.STRING },
-          police: { type: Type.STRING },
-          helpline: { type: Type.STRING },
-        },
-        required: ["hospital", "police", "helpline"],
-      },
-    },
-  });
-
-  if (response.text) {
-    return JSON.parse(response.text) as TripData['emergency'];
-  }
-  throw new Error("Failed to fetch emergency info");
+  return await fetchOpenRouterData('emergency', { location }) as TripData['emergency'];
 }
 
 export async function getFlights(from: string, to: string, date: string): Promise<TripData['flights']> {
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: `Find 5 flight options from ${from} to ${to} on ${date}. Include airline, flight number, duration, price in INR, and type (Direct/1 Stop).`,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            airline: { type: Type.STRING },
-            flightNumber: { type: Type.STRING },
-            duration: { type: Type.STRING },
-            price: { type: Type.NUMBER },
-            type: { type: Type.STRING },
-          },
-          required: ["airline", "flightNumber", "duration", "price", "type"],
-        },
-      },
-    },
-  });
-
-  if (response.text) {
-    return JSON.parse(response.text) as TripData['flights'];
-  }
-  throw new Error("Failed to fetch flights");
+  const result = await fetchOpenRouterData('flights', { from, to, date });
+  return result.flights || [];
 }
-
